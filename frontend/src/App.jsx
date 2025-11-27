@@ -6,7 +6,7 @@ function App() {
   return (
     <>
       <div className='text-3xl font-bold underline'>
-        Hello Ji !
+        Hello , I have my tools which i use here !
       </div>
     </>
   )
