@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 
-const TimerSelector = () => {
+const BreakTimer = () => {
   const [selectedMinutes, setSelectedMinutes] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
 
-  const minuteOptions = [1, 15, 20, 30, 40];
+  const breakOptions = [1, 5, 10, 15, 20];
 
   // Request notification permission on component mount
   useEffect(() => {
@@ -24,29 +24,26 @@ const TimerSelector = () => {
             // Send notification when timer completes. If permission isn't granted, try requesting it now.
             if ('Notification' in window) {
               if (Notification.permission === 'granted') {
-                new Notification('Work Timer Complete!', {
-                  body: 'Your work session is done. Time for a break!'
+                new Notification('Break Time Over!', {
+                  body: 'Your break is complete. Time to get back to work!'
                 });
               } else if (Notification.permission !== 'denied') {
                 Notification.requestPermission().then(perm => {
                   if (perm === 'granted') {
-                    new Notification('Work Timer Complete!', {
-                      body: 'Your work session is done. Time for a break!'
+                    new Notification('Break Time Over!', {
+                      body: 'Your break is complete. Time to get back to work!'
                     });
                   } else {
-                    // Fallback so user sees something
-                    window.alert('Work timer complete!');
+                    window.alert('Break time complete!');
                   }
                 }).catch(() => {
-                  window.alert('Work timer complete!');
+                  window.alert('Break time complete!');
                 });
               } else {
-                // permission denied
-                window.alert('Work timer complete!');
+                window.alert('Break time complete!');
               }
             } else {
-              // Notifications aren't supported
-              window.alert('Work timer complete!');
+              window.alert('Break time complete!');
             }
             return 0;
           }
@@ -77,17 +74,23 @@ const TimerSelector = () => {
     setIsRunning(false);
   };
 
+  const handleReset = () => {
+    setSelectedMinutes(null);
+    setIsRunning(false);
+    setSecondsLeft(0);
+  };
+
   const formatTime = (totalSeconds) => {
     const minutes = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
     return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const timerColor = isRunning ? '#8B00FF' : '#00008B';
+  const timerColor = isRunning ? '#FF6B6B' : '#DC3545';
 
   return (
     <div style={{ padding: '20px', textAlign: 'center' }}>
-      <h3 style={{ margin: '0 0 20px 0', textAlign: 'center' }}>Select Timer Duration</h3>
+      <h3 style={{ margin: '0 0 20px 0', textAlign: 'center' }}>Break Time Timer</h3>
 
       <div style={{ marginBottom: '20px' }}>
         <select
@@ -102,8 +105,8 @@ const TimerSelector = () => {
             minWidth: '150px'
           }}
         >
-          <option value="">Choose minutes...</option>
-          {minuteOptions.map(minute => (
+          <option value="">Choose break time...</option>
+          {breakOptions.map(minute => (
             <option key={minute} value={minute}>{minute} minutes</option>
           ))}
         </select>
@@ -124,14 +127,13 @@ const TimerSelector = () => {
             {formatTime(secondsLeft)}
           </div>
 
-          <div style={{ marginTop: '20px' }}>
+          <div style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'center' }}>
             <button
               onClick={handleStart}
               disabled={isRunning}
               style={{
                 padding: '10px 20px',
                 fontSize: '16px',
-                marginRight: '10px',
                 backgroundColor: isRunning ? '#ccc' : '#4CAF50',
                 color: 'white',
                 border: 'none',
@@ -156,6 +158,20 @@ const TimerSelector = () => {
             >
               Pause
             </button>
+            <button
+              onClick={handleReset}
+              style={{
+                padding: '10px 20px',
+                fontSize: '16px',
+                backgroundColor: '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Reset
+            </button>
           </div>
         </>
       )}
@@ -163,4 +179,4 @@ const TimerSelector = () => {
   );
 };
 
-export default TimerSelector;
+export default BreakTimer;
