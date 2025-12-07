@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const TimerSelector = () => {
   const [selectedMinutes, setSelectedMinutes] = useState(null);
@@ -14,40 +14,79 @@ const TimerSelector = () => {
     }
   }, []);
 
+  // Helper to send notifications with fallbacks and permission handling
+  const sendNotification = (title, options = {}) => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      window.alert(title + (options.body ? `\n${options.body}` : ''));
+      return;
+    }
+
+    const show = () => {
+      try {
+        new Notification(title, options);
+      } catch (err) {
+        // Some environments may throw — fallback to alert
+        // eslint-disable-next-line no-console
+        console.error('Notification show failed:', err);
+        window.alert(title + (options.body ? `\n${options.body}` : ''));
+      }
+    };
+
+    if (Notification.permission === 'granted') {
+      show();
+      return;
+    }
+
+    if (Notification.permission === 'denied') {
+      // user explicitly denied; show fallback
+      window.alert(title + (options.body ? `\n${options.body}` : ''));
+      return;
+    }
+
+    // permission is 'default' — request it and then show if granted
+    try {
+      const permResult = Notification.requestPermission();
+      if (permResult && typeof permResult.then === 'function') {
+        permResult.then(perm => {
+          if (perm === 'granted') show();
+          else window.alert(title + (options.body ? `\n${options.body}` : ''));
+        }).catch(() => {
+          window.alert(title + (options.body ? `\n${options.body}` : ''));
+        });
+      } else {
+        // Older callback style
+        Notification.requestPermission(function (perm) {
+          if (perm === 'granted') show();
+          else window.alert(title + (options.body ? `\n${options.body}` : ''));
+        });
+      }
+    } catch (err) {
+      // If requestPermission throws for some reason, fallback
+      // eslint-disable-next-line no-console
+      console.error('requestPermission failed:', err);
+      window.alert(title + (options.body ? `\n${options.body}` : ''));
+    }
+  };
+
+  // Prevent duplicate notifications: use a ref to mark when we've already notified for
+  // the current timer run. Also only recreate the interval when `isRunning` changes
+  // (not on every `secondsLeft` change) to avoid overlapping intervals.
+  const notifiedRef = useRef(false);
+
   useEffect(() => {
     let interval;
-    if (isRunning && secondsLeft > 0) {
+    if (isRunning) {
       interval = setInterval(() => {
         setSecondsLeft(prev => {
           if (prev <= 1) {
-            setIsRunning(false);
-            // Send notification when timer completes. If permission isn't granted, try requesting it now.
-            if ('Notification' in window) {
-              if (Notification.permission === 'granted') {
-                new Notification('Work Timer Complete!', {
-                  body: 'Your work session is done. Time for a break!'
-                });
-              } else if (Notification.permission !== 'denied') {
-                Notification.requestPermission().then(perm => {
-                  if (perm === 'granted') {
-                    new Notification('Work Timer Complete!', {
-                      body: 'Your work session is done. Time for a break!'
-                    });
-                  } else {
-                    // Fallback so user sees something
-                    window.alert('Work timer complete!');
-                  }
-                }).catch(() => {
-                  window.alert('Work timer complete!');
-                });
-              } else {
-                // permission denied
-                window.alert('Work timer complete!');
-              }
-            } else {
-              // Notifications aren't supported
-              window.alert('Work timer complete!');
+            // ensure we notify only once per run
+            if (!notifiedRef.current) {
+              notifiedRef.current = true;
+              sendNotification('Work Timer Complete!', {
+                body: 'Your work session is done. Time for a break!'
+              });
             }
+            setIsRunning(false);
             return 0;
           }
           return prev - 1;
@@ -55,11 +94,13 @@ const TimerSelector = () => {
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [isRunning, secondsLeft]);
+  }, [isRunning]);
 
   const handleSelectMinutes = (minutes) => {
     setSelectedMinutes(minutes);
     setSecondsLeft(minutes * 60);
+    // reset notification guard for a fresh run
+    if (typeof notifiedRef !== 'undefined') notifiedRef.current = false;
     setIsRunning(false);
   };
 
@@ -69,6 +110,8 @@ const TimerSelector = () => {
       if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission().catch(() => {});
       }
+      // reset notification guard when starting
+      if (typeof notifiedRef !== 'undefined') notifiedRef.current = false;
       setIsRunning(true);
     }
   };
