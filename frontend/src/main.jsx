@@ -8,6 +8,7 @@ import About from './pages/About'
 import Workhours from './features/workhours/Workhours.jsx'
 import App from './App.jsx'
 import ToonParser from './features/toonparser/toonparser.jsx'
+import AuthCallback from './AuthCallback.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -19,6 +20,7 @@ createRoot(document.getElementById('root')).render(
         <Route path="/toonparser" element={<ToonParser />} />
         <Route path="/workhours" element={<Workhours />} />
         <Route path="/*" element={<App />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,
