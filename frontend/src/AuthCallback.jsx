@@ -1,7 +1,8 @@
 import React, { useEffect } from "react";
+import axios from "axios";
 
 function AuthCallback() {
-  useEffect(() => {
+  useEffect(async () => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token"); // from /auth/google/callback redirect
     if (token) {

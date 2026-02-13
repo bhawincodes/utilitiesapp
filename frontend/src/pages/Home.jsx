@@ -1,5 +1,7 @@
-import React from 'react'
+import React, { use, useEffect } from 'react'
 import axios from "axios";
+import "./Home.css"
+
 
 export default function Home() {
 
@@ -17,11 +19,16 @@ export default function Home() {
     console.log(res.data);
   };
 
+  useEffect(() => {
+    if(localStorage.getItem("token"))
+      fetchProfile();
+  }, []);
+
 
   return (
     <div>
         <h1>Login</h1>
-        <button onClick={handleGoogleLogin}>Sign in with Google</button>
+        <button className="google" onClick={handleGoogleLogin}>Sign in with Google</button>
     </div>
   )
 }
