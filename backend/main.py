@@ -1,15 +1,16 @@
-from fastapi import FastAPI
-from routes.routes import endpoints
-
-
 import os
-from fastapi import FastAPI, Depends, HTTPException
+
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from jose import jwt
 from datetime import datetime, timedelta
 import httpx
 from dotenv import load_dotenv
+
+from dependencies import get_current_user
+from routes.routes import endpoints
+from routes.users import endpoints as user_endpoints
 
 load_dotenv()
 
@@ -27,6 +28,7 @@ JWT_EXP_MIN = 60
 app = FastAPI()
 
 app.include_router(endpoints)
+app.include_router(user_endpoints)
 
 app.add_middleware(
     CORSMiddleware,
@@ -98,19 +100,6 @@ async def google_callback(code: str | None = None):
     # For SPA, better to redirect back to React with token in query or fragment
     redirect_url = f"http://localhost:5173/auth/callback?token={app_token}"
     return RedirectResponse(redirect_url)
-
-# example protected route
-from fastapi import Header
-
-def get_current_user(authorization: str = Header(None)):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing token")
-    token = authorization.split(" ", 1)[1]
-    try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    return payload
 
 @app.get("/me")
 async def me(user=Depends(get_current_user)):
