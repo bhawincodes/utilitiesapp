@@ -129,20 +129,20 @@ const TimerSelector = () => {
   const timerColor = isRunning ? '#8B00FF' : '#00008B';
 
   return (
-    <div style={{ padding: '20px', textAlign: 'center' }}>
-      <h3 style={{ margin: '0 0 20px 0', textAlign: 'center' }}>Select Timer Duration</h3>
+    <div style={{ padding: '1.25rem', textAlign: 'center' }}>
+      <h3 style={{ margin: '0 0 1.25rem 0', textAlign: 'center' }}>Select Timer Duration</h3>
 
-      <div style={{ marginBottom: '20px' }}>
+      <div style={{ marginBottom: '1.25rem' }}>
         <select
           value={selectedMinutes || ''}
           onChange={(e) => handleSelectMinutes(Number(e.target.value))}
           style={{
-            padding: '10px 15px',
-            fontSize: '16px',
-            borderRadius: '4px',
-            border: '2px solid #ccc',
+            padding: '0.625rem 0.9375rem',
+            fontSize: '1rem',
+            borderRadius: '0.25rem',
+            border: '0.125rem solid #ccc',
             cursor: 'pointer',
-            minWidth: '150px'
+            minWidth: '9.375rem'
           }}
         >
           <option value="">Choose minutes...</option>
@@ -155,30 +155,30 @@ const TimerSelector = () => {
       {selectedMinutes !== null && (
         <>
           <div style={{
-            fontSize: '56px',
+            fontSize: '3.5rem',
             fontWeight: 'bold',
-            margin: '20px 0',
-            padding: '30px',
+            margin: '1.25rem 0',
+            padding: '1.875rem',
             backgroundColor: timerColor,
             color: 'white',
-            borderRadius: '8px',
+            borderRadius: '0.5rem',
             fontFamily: 'monospace'
           }}>
             {formatTime(secondsLeft)}
           </div>
 
-          <div style={{ marginTop: '20px' }}>
+          <div style={{ marginTop: '1.25rem' }}>
             <button
               onClick={handleStart}
               disabled={isRunning}
               style={{
-                padding: '10px 20px',
-                fontSize: '16px',
-                marginRight: '10px',
+                padding: '0.625rem 1.25rem',
+                fontSize: '1rem',
+                marginRight: '0.625rem',
                 backgroundColor: isRunning ? '#ccc' : '#4CAF50',
                 color: 'white',
                 border: 'none',
-                borderRadius: '4px',
+                borderRadius: '0.25rem',
                 cursor: isRunning ? 'not-allowed' : 'pointer'
               }}
             >
@@ -188,12 +188,12 @@ const TimerSelector = () => {
               onClick={handlePause}
               disabled={!isRunning}
               style={{
-                padding: '10px 20px',
-                fontSize: '16px',
+                padding: '0.625rem 1.25rem',
+                fontSize: '1rem',
                 backgroundColor: !isRunning ? '#ccc' : '#FF9800',
                 color: 'white',
                 border: 'none',
-                borderRadius: '4px',
+                borderRadius: '0.25rem',
                 cursor: !isRunning ? 'not-allowed' : 'pointer'
               }}
             >

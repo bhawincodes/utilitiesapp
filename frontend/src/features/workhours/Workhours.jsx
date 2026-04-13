@@ -5,8 +5,8 @@ import BreakTimer from './BreakTimer';
 
 const Workhours = () => {
   return (
-    <Box sx={{ padding: '30px', backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
-      <Typography variant="h4" sx={{ marginBottom: '30px', textAlign: 'center', fontWeight: 'bold' }}>
+    <Box sx={{ padding: '1.875rem', backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
+      <Typography variant="h4" sx={{ marginBottom: '1.875rem', textAlign: 'center', fontWeight: 'bold' }}>
         Work Hours Manager
       </Typography>
 
