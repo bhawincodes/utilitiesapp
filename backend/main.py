@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from dependencies import get_current_user
 from routes.routes import endpoints
 from routes.users import endpoints as user_endpoints
+from routes.timelog import endpoints as timelog_endpoints
 
 load_dotenv()
 
@@ -29,10 +30,11 @@ app = FastAPI()
 
 app.include_router(endpoints)
 app.include_router(user_endpoints)
+app.include_router(timelog_endpoints)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5174"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -98,7 +100,7 @@ async def google_callback(code: str | None = None):
     print(payload)
 
     # For SPA, better to redirect back to React with token in query or fragment
-    redirect_url = f"http://localhost:5173/auth/callback?token={app_token}"
+    redirect_url = f"http://localhost:5174/auth/callback?token={app_token}"
     return RedirectResponse(redirect_url)
 
 @app.get("/me")

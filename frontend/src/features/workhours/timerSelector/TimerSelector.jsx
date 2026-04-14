@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
+import './TimerSelector.css';
+import apiservice from './../../../lib/apiService.jsx';
 
 const TimerSelector = () => {
   const [selectedMinutes, setSelectedMinutes] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
+  const [currentSecondsDone, setCurrentSecondsDone] = useState(0);
 
   const minuteOptions = [1, 15, 20, 30, 40];
 
@@ -73,50 +76,50 @@ const TimerSelector = () => {
   // (not on every `secondsLeft` change) to avoid overlapping intervals.
   const notifiedRef = useRef(false);
 
+  // Interval effect: only decrements secondsLeft
   useEffect(() => {
     let interval;
     if (isRunning) {
       interval = setInterval(() => {
-        setSecondsLeft(prev => {
-          if (prev <= 1) {
-            // ensure we notify only once per run
-            if (!notifiedRef.current) {
-              notifiedRef.current = true;
-              sendNotification('Work Timer Complete!', {
-                body: 'Your work session is done. Time for a break!'
-              });
-            }
-            setIsRunning(false);
-            return 0;
-          }
-          return prev - 1;
-        });
+        setSecondsLeft(prev => (prev > 0 ? prev - 1 : 0));
       }, 1000);
     }
     return () => clearInterval(interval);
   }, [isRunning]);
 
+  // Effect to handle timer completion and log time/notify ONCE
+  useEffect(() => {
+    if (isRunning && secondsLeft === 0 && !notifiedRef.current) {
+      notifiedRef.current = true;
+      sendNotification('Work Timer Complete!', {
+        body: 'Your work session is done. Time for a break!'
+      });
+      apiservice.logTime(selectedMinutes * 60); // Log the full time spent
+      setCurrentSecondsDone(0);
+      setIsRunning(false);
+    }
+  }, [isRunning, secondsLeft, selectedMinutes]);
+
   const handleSelectMinutes = (minutes) => {
     setSelectedMinutes(minutes);
     setSecondsLeft(minutes * 60);
+    setCurrentSecondsDone(0);
     // reset notification guard for a fresh run
     if (typeof notifiedRef !== 'undefined') notifiedRef.current = false;
     setIsRunning(false);
   };
 
   const handleStart = () => {
-    if (selectedMinutes !== null) {
-      // Try to get notification permission on user gesture (required in some browsers)
-      if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission().catch(() => {});
+      if(secondsLeft === 0) {
+        setSecondsLeft(selectedMinutes * 60);
       }
-      // reset notification guard when starting
-      if (typeof notifiedRef !== 'undefined') notifiedRef.current = false;
       setIsRunning(true);
-    }
   };
 
   const handlePause = () => {
+    const secondsDone = selectedMinutes * 60 - secondsLeft - currentSecondsDone;
+    setCurrentSecondsDone(prev => prev + secondsDone);
+    apiservice.logTime(secondsDone); // Log the time spent so far
     setIsRunning(false);
   };
 
@@ -126,7 +129,7 @@ const TimerSelector = () => {
     return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const timerColor = isRunning ? '#8B00FF' : '#00008B';
+
 
   return (
     <div style={{ padding: '1.25rem', textAlign: 'center' }}>
@@ -136,14 +139,7 @@ const TimerSelector = () => {
         <select
           value={selectedMinutes || ''}
           onChange={(e) => handleSelectMinutes(Number(e.target.value))}
-          style={{
-            padding: '0.625rem 0.9375rem',
-            fontSize: '1rem',
-            borderRadius: '0.25rem',
-            border: '0.125rem solid #ccc',
-            cursor: 'pointer',
-            minWidth: '9.375rem'
-          }}
+          className="timer-select"
         >
           <option value="">Choose minutes...</option>
           {minuteOptions.map(minute => (
@@ -154,16 +150,9 @@ const TimerSelector = () => {
 
       {selectedMinutes !== null && (
         <>
-          <div style={{
-            fontSize: '3.5rem',
-            fontWeight: 'bold',
-            margin: '1.25rem 0',
-            padding: '1.875rem',
-            backgroundColor: timerColor,
-            color: 'white',
-            borderRadius: '0.5rem',
-            fontFamily: 'monospace'
-          }}>
+          <div
+            className={`timer-display ${isRunning ? 'timer-display--running' : 'timer-display--stopped'}`}
+          >
             {formatTime(secondsLeft)}
           </div>
 
@@ -171,31 +160,14 @@ const TimerSelector = () => {
             <button
               onClick={handleStart}
               disabled={isRunning}
-              style={{
-                padding: '0.625rem 1.25rem',
-                fontSize: '1rem',
-                marginRight: '0.625rem',
-                backgroundColor: isRunning ? '#ccc' : '#4CAF50',
-                color: 'white',
-                border: 'none',
-                borderRadius: '0.25rem',
-                cursor: isRunning ? 'not-allowed' : 'pointer'
-              }}
+              className={`timer-btn-start${isRunning ? ' timer-btn-start--disabled' : ''}`}
             >
               Start
             </button>
             <button
               onClick={handlePause}
               disabled={!isRunning}
-              style={{
-                padding: '0.625rem 1.25rem',
-                fontSize: '1rem',
-                backgroundColor: !isRunning ? '#ccc' : '#FF9800',
-                color: 'white',
-                border: 'none',
-                borderRadius: '0.25rem',
-                cursor: !isRunning ? 'not-allowed' : 'pointer'
-              }}
+              className={`timer-btn-pause${!isRunning ? ' timer-btn-pause--disabled' : ''}`}
             >
               Pause
             </button>

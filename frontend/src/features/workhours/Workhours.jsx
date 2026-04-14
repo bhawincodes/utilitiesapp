@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Card, CardContent, Grid, Typography } from '@mui/material';
-import TimerSelector from './TimerSelector';
+import TimerSelector from './timerSelector/TimerSelector';
 import BreakTimer from './BreakTimer';
 
 const Workhours = () => {
