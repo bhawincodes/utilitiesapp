@@ -3,7 +3,7 @@
   "name": "Utilities App Extension",
   "version": "1.0.0",
   "description": "A simple bootstrap Chrome extension for the Utilities App project.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "tabs"],
   "action": {
     "default_title": "Utilities App Extension",
     "default_popup": "popup.html"
