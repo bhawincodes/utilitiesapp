@@ -16,3 +16,9 @@ class TimeLog(BaseModel):
     email: Optional[str] = None
     created_at: Optional[datetime] = None
 
+
+class DomainTimeLog(BaseModel):
+    domain: str
+    timeSpent: float
+    created_at: Optional[datetime] = None
+

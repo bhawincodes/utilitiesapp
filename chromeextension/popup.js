@@ -7,16 +7,24 @@ function updateStatus(message) {
   }
 }
 
-if (refreshButton) {
-  refreshButton.addEventListener('click', () => {
-    updateStatus('Refreshed');
+function loadTrackingStatus() {
+  chrome.storage.local.get(['trackingStatus'], (result) => {
+    if (result.trackingStatus) {
+      updateStatus(result.trackingStatus);
+    }
   });
 }
 
+if (refreshButton) {
+  refreshButton.addEventListener('click', () => {
+    loadTrackingStatus();
+  });
+}
 
-chrome.runtime.sendMessage({ action: "START_PROCESS" }, (response) => {
-  console.log("Background response:", response);
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.trackingStatus) {
+    updateStatus(changes.trackingStatus.newValue);
+  }
 });
 
-
-
+loadTrackingStatus();
