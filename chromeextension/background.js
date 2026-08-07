@@ -1,4 +1,6 @@
 const API_URL = 'http://127.0.0.1:8000/domain-time';
+const KEEPALIVE_ALARM = 'keepalive';
+const FLUSH_ALARM = 'flushTimer';
 
 let tracker = null;
 
@@ -21,7 +23,17 @@ class TimeTracking {
     this.currentTabId = null;
     this.isWindowFocused = true;
     this.addEventListeners();
+    this.ensureKeepalive();
     this.restoreAndResume();
+  }
+
+  ensureKeepalive() {
+    if (!chrome.alarms) {
+      return;
+    }
+
+    chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 1 });
+    chrome.alarms.create(FLUSH_ALARM, { periodInMinutes: 1 });
   }
 
   persistTimerState() {
@@ -49,11 +61,24 @@ class TimeTracking {
         console.log('[TimeTracking] Restored session for', this.currentDomain);
       }
 
-      chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
-        if (tabs && tabs[0]) {
-          this.handleTabChange(tabs[0].id);
-        }
-      });
+      this.trackActiveTab();
+    });
+  }
+
+  trackActiveTab() {
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+      if (chrome.runtime.lastError) {
+        console.error('[TimeTracking]', chrome.runtime.lastError.message);
+        setStatus('Tracking idle (waiting for a tab)');
+        return;
+      }
+
+      if (tabs && tabs[0]) {
+        this.handleTabChange(tabs[0].id);
+        return;
+      }
+
+      setStatus('Tracking idle (waiting for a tab)');
     });
   }
 
@@ -72,14 +97,30 @@ class TimeTracking {
       }
     });
 
+    chrome.tabs.onCreated.addListener((tab) => {
+      if (tab.active && tab.id != null) {
+        this.handleTabChange(tab.id);
+      }
+    });
+
+    // Keep tracker alive: submit closed tab, then continue on the next active tab
     chrome.tabs.onRemoved.addListener((tabId) => {
       if (this.currentTabId === tabId) {
         this.stopAndSubmitTimer();
       }
+      // Do not shut down — pick up whatever tab is now active (if any)
+      this.trackActiveTab();
+    });
+
+    chrome.windows.onCreated.addListener(() => {
+      this.isWindowFocused = true;
+      this.trackActiveTab();
     });
 
     chrome.windows.onRemoved.addListener(() => {
+      // Submit current session, but leave the tracker running for the next window
       this.stopAndSubmitTimer();
+      setStatus('Tracking idle (waiting for a window)');
     });
 
     if (chrome.windows.onFocusChanged) {
@@ -87,23 +128,27 @@ class TimeTracking {
         if (windowId === chrome.windows.WINDOW_ID_NONE) {
           this.isWindowFocused = false;
           this.stopAndSubmitTimer();
+          setStatus('Paused (Chrome unfocused)');
           return;
         }
 
         this.isWindowFocused = true;
-        chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
-          if (tabs && tabs[0]) {
-            this.handleTabChange(tabs[0].id);
-          }
-        });
+        this.trackActiveTab();
       });
     }
 
     if (chrome.alarms) {
-      chrome.alarms.create('flushTimer', { periodInMinutes: 1 });
       chrome.alarms.onAlarm.addListener((alarm) => {
-        if (alarm.name === 'flushTimer') {
+        if (alarm.name === FLUSH_ALARM) {
           this.flushCurrentTimer();
+        }
+        if (alarm.name === KEEPALIVE_ALARM) {
+          // Wake the service worker and re-assert keepalive + active tab
+          this.ensureKeepalive();
+          if (!this.currentTimerStart) {
+            this.trackActiveTab();
+          }
+          console.log('[TimeTracking] Keepalive tick');
         }
       });
     }
@@ -201,7 +246,9 @@ class TimeTracking {
 
     chrome.tabs.get(tabId, (tab) => {
       if (chrome.runtime.lastError) {
-        console.error('[TimeTracking]', chrome.runtime.lastError.message);
+        // Tab may already be gone — stay alive; onRemoved/onActivated will resume
+        console.warn('[TimeTracking]', chrome.runtime.lastError.message);
+        setStatus('Tracking idle (waiting for a tab)');
         return;
       }
 
@@ -238,6 +285,16 @@ function ensureTracker() {
 }
 
 ensureTracker();
+
+chrome.runtime.onInstalled.addListener(() => {
+  ensureTracker();
+  setStatus('Extension installed — tracking active');
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  ensureTracker();
+  setStatus('Browser started — tracking active');
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'START_PROCESS') {
