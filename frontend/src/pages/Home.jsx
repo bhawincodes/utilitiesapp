@@ -43,9 +43,11 @@ export default function Home() {
 
   return (
     <div>
-      <h1>Login</h1>
       {!user && (
-        <button className="google" onClick={handleGoogleLogin}>Sign in with Google</button>
+        <>
+          <h1>Login</h1>
+          <button className="google" onClick={handleGoogleLogin}>Sign in with Google</button>
+        </>
       )}
     </div>
   );

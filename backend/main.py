@@ -12,6 +12,7 @@ from dependencies import get_current_user
 from routes.routes import endpoints
 from routes.users import endpoints as user_endpoints
 from routes.timelog import endpoints as timelog_endpoints
+from routes.ask import endpoints as ask_endpoints
 
 load_dotenv()
 
@@ -31,6 +32,7 @@ app = FastAPI()
 app.include_router(endpoints)
 app.include_router(user_endpoints)
 app.include_router(timelog_endpoints)
+app.include_router(ask_endpoints)
 
 app.add_middleware(
     CORSMiddleware,
