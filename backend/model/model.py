@@ -22,3 +22,9 @@ class DomainTimeLog(BaseModel):
     timeSpent: float
     created_at: Optional[datetime] = None
 
+
+class AskQuery(BaseModel):
+    query: str
+    email: Optional[str] = None
+    created_at: Optional[datetime] = None
+

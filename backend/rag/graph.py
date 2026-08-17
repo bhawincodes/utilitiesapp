@@ -1,3 +1,4 @@
+import json
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Optional, TypedDict
@@ -13,19 +14,24 @@ from config.config import OPENAI_API_KEY, OPENAI_MODEL, db
 
 RETRIEVE_LIMIT = 2000
 TOP_K = 8
+CHART_DOMAIN_LIMIT = 8
+CHART_DAY_LIMIT = 14
 COLLECTION = "domain_timelogs"
+
+CHART_JSON_TOKEN = "<<<CHART_JSON>>>"
 
 SYSTEM_PROMPT = """You answer questions about browsing time using only the provided context.
 The context includes domain totals (authoritative for "how much time") and retrieved log snippets.
 If the logs do not support an answer, say so. Do not invent domains or durations.
-Times are in seconds unless you convert them for readability."""
+Times in the context are already formatted as days, hours, minutes, and seconds.
+Use that same readable format in your answer. Do not reply with raw second counts."""
 
-FILTER_PROMPT = """Extract a date window from the user's question about browsing logs.
+FILTER_PROMPT = """Extract a date window and site focus from the user's question about browsing logs.
 Today is {today} (UTC).
 Use inclusive YYYY-MM-DD dates. If they ask about one day, start and end are that day.
 If they ask about a month or week, cover the full range.
 Leave start/end null if no time period is mentioned.
-If they name a site/domain, put it in domain (e.g. youtube.com)."""
+If they name a site/domain, put it in domain (e.g. youtube.com). Match the named site even from a brand name like YouTube or Gmail."""
 
 
 class QueryFilters(BaseModel):
@@ -38,7 +44,40 @@ class RAGState(TypedDict):
     query: str
     filters: dict
     context: str
+    chart: dict
     answer: str
+
+
+def _format_duration(seconds: float) -> str:
+    total = max(0, int(round(float(seconds or 0))))
+    days, rem = divmod(total, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, secs = divmod(rem, 60)
+    parts = []
+    if days:
+        parts.append(f"{days} day{'s' if days != 1 else ''}")
+    if hours:
+        parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+    if minutes:
+        parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+    if secs or not parts:
+        parts.append(f"{secs} second{'s' if secs != 1 else ''}")
+    return " ".join(parts)
+
+
+def _duration_payload(seconds: float) -> dict:
+    total = max(0, int(round(float(seconds or 0))))
+    days, rem = divmod(total, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, secs = divmod(rem, 60)
+    return {
+        "seconds": total,
+        "days": days,
+        "hours": hours,
+        "minutes": minutes,
+        "remainder_seconds": secs,
+        "label": _format_duration(total),
+    }
 
 
 def _format_ts(value) -> str:
@@ -88,7 +127,7 @@ def _load_logs(match: dict) -> list[dict]:
     )
 
 
-def _build_aggregates(match: dict) -> str:
+def _build_aggregates(match: dict) -> tuple[str, dict]:
     pipeline = []
     if match:
         pipeline.append({"$match": match})
@@ -120,16 +159,22 @@ def _build_aggregates(match: dict) -> str:
         by_domain[domain] += seconds
         by_day[day][domain] += seconds
 
-    domain_lines = [
-        f"{domain}: {int(seconds)}s"
+    domain_rows = [
+        {"domain": domain, **_duration_payload(seconds)}
         for domain, seconds in sorted(by_domain.items(), key=lambda item: item[1], reverse=True)
     ]
+    domain_lines = [f"{row['domain']}: {row['label']}" for row in domain_rows]
+    day_rows = []
     day_blocks = []
     for day in sorted(by_day.keys(), reverse=True):
-        rows = [
-            f"  {domain}: {int(seconds)}s"
+        domains = [
+            {"domain": domain, **_duration_payload(seconds)}
             for domain, seconds in sorted(by_day[day].items(), key=lambda item: item[1], reverse=True)
         ]
+        day_total = sum(item["seconds"] for item in domains)
+        day_payload = {"day": day, "domains": domains, **_duration_payload(day_total)}
+        day_rows.append(day_payload)
+        rows = [f"  {item['domain']}: {item['label']}" for item in domains]
         day_blocks.append(f"{day}:\n" + "\n".join(rows))
 
     window = "all stored logs"
@@ -145,19 +190,89 @@ def _build_aggregates(match: dict) -> str:
             parts.append(f"domain ~ {match['domain'].get('$regex')}")
         window = " ".join(parts) if parts else window
 
-    return (
+    chart = {
+        "window": window,
+        "by_domain": domain_rows,
+        "by_day": day_rows,
+    }
+    text = (
         f"Totals ({window}; full Mongo aggregation, not capped at {RETRIEVE_LIMIT}):\n"
         "Totals by domain:\n"
         + ("\n".join(domain_lines) if domain_lines else "(none)")
         + "\n\nTotals by day:\n"
         + ("\n".join(day_blocks) if day_blocks else "(none)")
     )
+    return text, chart
+
+
+def _mentioned_domains(query: str, domains: list[str]) -> list[str]:
+    text = (query or "").lower()
+    hits = []
+    for domain in domains:
+        name = (domain or "").lower()
+        stem = name.split(".")[0]
+        if name and name in text:
+            hits.append(domain)
+        elif len(stem) >= 4 and stem in text:
+            hits.append(domain)
+    return hits
+
+
+def _trim_chart(chart: dict, filters: dict, query: str) -> dict:
+    by_domain = list(chart.get("by_domain") or [])
+    by_day = list(chart.get("by_day") or [])
+    domain_filter = (filters.get("domain") or "").strip().lower()
+    focused = []
+    if domain_filter:
+        focused = [
+            row["domain"]
+            for row in by_domain
+            if domain_filter in (row.get("domain") or "").lower()
+        ]
+    if not focused:
+        focused = _mentioned_domains(query, [row.get("domain") for row in by_domain])
+
+    if focused:
+        keep = set(focused)
+        by_domain = [row for row in by_domain if row.get("domain") in keep]
+    else:
+        by_domain = by_domain[:CHART_DOMAIN_LIMIT]
+        keep = {row.get("domain") for row in by_domain}
+
+    has_date = bool(filters.get("start") or filters.get("end"))
+    if not has_date:
+        by_day = by_day[:CHART_DAY_LIMIT]
+
+    trimmed_days = []
+    for day in by_day:
+        domains = [row for row in (day.get("domains") or []) if row.get("domain") in keep]
+        if not domains:
+            continue
+        total = sum(int(row.get("seconds") or 0) for row in domains)
+        trimmed_days.append(
+            {
+                "day": day.get("day"),
+                "domains": domains,
+                **_duration_payload(total),
+            }
+        )
+
+    return {
+        "window": chart.get("window"),
+        "filters": {
+            "start": filters.get("start"),
+            "end": filters.get("end"),
+            "domain": filters.get("domain"),
+        },
+        "by_domain": by_domain,
+        "by_day": trimmed_days,
+    }
 
 
 def _log_chunk(log: dict) -> str:
     domain = log.get("domain") or "unknown"
-    seconds = int(float(log.get("timeSpent") or 0))
-    return f"{_format_ts(log.get('created_at'))} | {domain} | {seconds}s"
+    duration = _format_duration(log.get("timeSpent") or 0)
+    return f"{_format_ts(log.get('created_at'))} | {domain} | {duration}"
 
 
 def _retrieve_chunks(query: str, logs: list[dict]) -> str:
@@ -196,7 +311,7 @@ def parse_filters(state: RAGState) -> dict:
 
 def retrieve(state: RAGState) -> dict:
     match = _mongo_match(state.get("filters") or {})
-    aggregates = _build_aggregates(match)
+    aggregates, chart = _build_aggregates(match)
     logs = _load_logs(match)
     snippets = _retrieve_chunks(state["query"], logs)
     note = ""
@@ -210,7 +325,8 @@ def retrieve(state: RAGState) -> dict:
         if logs or "(none)" not in aggregates
         else "No domain time logs were found."
     )
-    return {"context": context}
+    chart = _trim_chart(chart, state.get("filters") or {}, state.get("query") or "")
+    return {"context": context, "chart": chart}
 
 
 def generate(state: RAGState) -> dict:
@@ -241,8 +357,35 @@ def build_graph():
 rag_graph = build_graph()
 
 
+def _empty_state(query: str) -> RAGState:
+    return {
+        "query": query,
+        "filters": {},
+        "context": "",
+        "chart": {"window": "all stored logs", "by_domain": [], "by_day": []},
+        "answer": "",
+    }
+
+
 def run_ask(query: str) -> str:
-    result = rag_graph.invoke(
-        {"query": query, "filters": {}, "context": "", "answer": ""}
-    )
+    result = rag_graph.invoke(_empty_state(query))
     return result["answer"]
+
+
+def run_ask_stream(query: str):
+    state: RAGState = _empty_state(query)
+    state.update(parse_filters(state))
+    state.update(retrieve(state))
+    llm = ChatOpenAI(model=OPENAI_MODEL, api_key=OPENAI_API_KEY, temperature=0)
+    for chunk in llm.stream(
+        [
+            SystemMessage(content=SYSTEM_PROMPT),
+            HumanMessage(
+                content=f"Question: {state['query']}\n\nContext:\n{state['context']}"
+            ),
+        ]
+    ):
+        if chunk.content:
+            yield chunk.content
+    yield CHART_JSON_TOKEN
+    yield json.dumps(state.get("chart") or {})
