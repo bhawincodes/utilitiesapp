@@ -372,20 +372,38 @@ def run_ask(query: str) -> str:
     return result["answer"]
 
 
+def _message_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict) and item.get("type") == "text":
+                parts.append(item.get("text") or "")
+        return "".join(parts)
+    return ""
+
+
 def run_ask_stream(query: str):
-    state: RAGState = _empty_state(query)
-    state.update(parse_filters(state))
-    state.update(retrieve(state))
-    llm = ChatOpenAI(model=OPENAI_MODEL, api_key=OPENAI_API_KEY, temperature=0)
-    for chunk in llm.stream(
-        [
-            SystemMessage(content=SYSTEM_PROMPT),
-            HumanMessage(
-                content=f"Question: {state['query']}\n\nContext:\n{state['context']}"
-            ),
-        ]
+    chart = {}
+    for mode, chunk in rag_graph.stream(
+        _empty_state(query),
+        stream_mode=["messages", "updates"],
     ):
-        if chunk.content:
-            yield chunk.content
+        if mode == "updates":
+            retrieve_update = chunk.get("retrieve") or {}
+            if retrieve_update.get("chart"):
+                chart = retrieve_update["chart"]
+            continue
+        if mode != "messages":
+            continue
+        message, metadata = chunk
+        if metadata.get("langgraph_node") != "generate":
+            continue
+        text = _message_text(getattr(message, "content", ""))
+        if text:
+            yield text
     yield CHART_JSON_TOKEN
-    yield json.dumps(state.get("chart") or {})
+    yield json.dumps(chart or {})

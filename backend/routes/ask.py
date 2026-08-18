@@ -10,8 +10,6 @@ from rag.graph import run_ask_stream
 
 COLLECTION = "ask_queries"
 endpoints = APIRouter()
-
-
 class AskRequest(BaseModel):
     query: str = Field(..., min_length=1)
 
