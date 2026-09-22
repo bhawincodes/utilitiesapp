@@ -1,6 +1,9 @@
 This application contains 
+<br>
 1: A chrome extension : Which tracks the time you spent on a particular website 
+<br>
 2: Backend : Stores the data
+<br>
 3: Frontend react : where you can ask questions about your data 
 
 AI layer:
